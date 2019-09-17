@@ -8,9 +8,13 @@
 #include <termios.h>
 #include <stdint.h>
 #include <signal.h>
+#include <stdlib.h>
 
 #include <X11/X.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
+#include <chrono>
 
 int fd;
 
@@ -64,26 +68,34 @@ int main(int argc, char** argv) {
 
     write(fd, "\x04\xff", 2);
 
+    const std::chrono::milliseconds INTERVAL(32);
+    auto lastTime = std::chrono::system_clock::now();
 
     while(1) {
-        XImage* image = XGetImage(display, rootWindow, 0, 0, 1920, 1080, AllPlanes,ZPixmap);
-        int status = XInitImage(image);
+        auto currentTime = std::chrono::system_clock::now();
 
-        unsigned int a = image->f.get_pixel(image, 960, 540);
+        if(currentTime - lastTime > INTERVAL) {
+            XImage* image = XGetImage(display, rootWindow, 0, 0, 1920, 1080, AllPlanes,ZPixmap);
+            int status = XInitImage(image);
 
-        uint8_t red = a >> 16;
-        uint8_t green = a >> 8;
-        uint8_t blue = a;
+            unsigned int a = image->f.get_pixel(image, 960, 540);
 
-        printf("[%lu] %x\n", counter, a);
-        printf("[%lu] %x %x %x\n", counter, red, green, blue);
+            uint8_t red = a >> 16;
+            uint8_t green = a >> 8;
+            uint8_t blue = a;
 
-        uint8_t payload[] = {0x03, red, green, blue};
-        write(fd, payload, 4);
+            uint8_t payload[] = {0x03, red, green, blue};
+            write(fd, payload, 4);
 
-        XDestroyImage(image);
-        usleep(200000);
-        counter++;
+            XDestroyImage(image);
+
+            auto end = std::chrono::system_clock::now();
+
+            printf("took %ld ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime).count());
+            lastTime = std::chrono::system_clock::now();
+
+            counter++;
+        }
     }
 
     close(fd);
