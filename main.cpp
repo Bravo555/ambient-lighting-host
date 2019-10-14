@@ -15,6 +15,7 @@
 #include <X11/Xutil.h>
 
 #include <chrono>
+#include <thread>
 
 int fd;
 
@@ -23,6 +24,29 @@ void int_handler(int sig) {
     close(fd);
 
     exit(0);
+}
+
+uint32_t average_colour(uint32_t* data, uint width, uint height) {
+    unsigned long redSum = 0, greenSum = 0, blueSum = 0;
+    for(uint y = 0; y < height; y++) {
+        for(uint x = 0; x < width; x++) {
+            uint32_t pixel = data[1920 * y + x];
+
+            uint red = (pixel >> 16) & 0xff;
+            uint green = (pixel >> 8) & 0xff;
+            uint blue = pixel & 0xff;
+
+            redSum += red;
+            greenSum += green;
+            blueSum += blue;
+        }
+    }
+    uint redavg = redSum / (width * height);
+    uint greenavg = greenSum / (width * height);
+    uint blueavg = blueSum / (width * height);
+
+    uint8_t colours[] = {redavg, greenavg, blueavg};
+    return *(uint32_t*)colours;
 }
 
 int main(int argc, char** argv) {
@@ -64,38 +88,32 @@ int main(int argc, char** argv) {
         return 1;
     }
     Window rootWindow = XRootWindow(display, XDefaultScreen(display));
-    unsigned long counter = 0;
 
     write(fd, "\x04\xff", 2);
 
-    const std::chrono::milliseconds INTERVAL(32);
-    auto lastTime = std::chrono::system_clock::now();
+    unsigned long counter = 0;
+    while(counter++) {
+        auto start = std::chrono::system_clock::now();
 
-    while(1) {
-        auto currentTime = std::chrono::system_clock::now();
+        XImage* image = XGetImage(display, rootWindow, 0, 0, 1920, 1080, AllPlanes,ZPixmap);
+        int status = XInitImage(image);
 
-        if(currentTime - lastTime > INTERVAL) {
-            XImage* image = XGetImage(display, rootWindow, 0, 0, 1920, 1080, AllPlanes,ZPixmap);
-            int status = XInitImage(image);
+        uint32_t* data = (uint32_t*)image->data;
+        uint32_t avgColour = average_colour(data, 1920, 1080);
 
-            unsigned int a = image->f.get_pixel(image, 960, 540);
+        uint8_t red = avgColour >> 16;
+        uint8_t green = avgColour >> 8;
+        uint8_t blue = avgColour;
 
-            uint8_t red = a >> 16;
-            uint8_t green = a >> 8;
-            uint8_t blue = a;
+        uint8_t payload[] = {0x03, red, green, blue};
+        write(fd, payload, 4);
 
-            uint8_t payload[] = {0x03, red, green, blue};
-            write(fd, payload, 4);
+        XDestroyImage(image);
 
-            XDestroyImage(image);
+        auto end = std::chrono::system_clock::now();
+        auto duration = end - start;
 
-            auto end = std::chrono::system_clock::now();
-
-            printf("took %ld ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - lastTime).count());
-            lastTime = std::chrono::system_clock::now();
-
-            counter++;
-        }
+        printf("took %ld ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
     }
 
     close(fd);
