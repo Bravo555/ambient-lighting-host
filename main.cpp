@@ -26,6 +26,29 @@ void int_handler(int sig) {
     exit(0);
 }
 
+void init_serial(int fd) {
+    struct termios tty;
+    struct termios tty_old;
+    memset(&tty, 0, sizeof tty);
+    tty_old = tty;
+
+    cfsetispeed(&tty, (speed_t)B115200);
+    cfsetospeed(&tty, (speed_t)B115200);
+
+    tty.c_cflag &= ~PARENB; // Make 8n1
+    tty.c_cflag &= ~CSTOPB;
+    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag |= CS8;
+
+    tty.c_cc[VMIN] = 1;            // read doesn't block
+    tty.c_cc[VTIME] = 5;           // 0.5 seconds read timeout
+    tty.c_cflag |= CREAD | CLOCAL; // turn on READ & ignore ctrl lines
+
+    cfmakeraw(&tty);
+    tcflush(fd, TCIFLUSH);
+    tcsetattr(fd, TCSANOW, &tty);
+}
+
 uint32_t average_colour(uint32_t* data, uint width, uint height) {
     unsigned long redSum = 0, greenSum = 0, blueSum = 0;
     for(uint y = 0; y < height; y++) {
@@ -49,6 +72,19 @@ uint32_t average_colour(uint32_t* data, uint width, uint height) {
     return *(uint32_t*)colours;
 }
 
+void send_colour_data(int fd, uint32_t colour) {
+    uint8_t red = colour >> 16;
+    uint8_t green = colour >> 8;
+    uint8_t blue = colour;
+
+    uint8_t payload[] = {0x03, red, green, blue};
+    write(fd, payload, 4);
+}
+
+void enable_capture_mode(int fd) {
+    write(fd, "\x04\xff", 2);
+}
+
 int main(int argc, char** argv) {
     // serial port
     fd = open("/dev/ttyUSB0", O_RDWR | O_SYNC | O_NOCTTY);
@@ -57,29 +93,9 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    init_serial(fd);
+    enable_capture_mode(fd);
     signal(SIGINT, int_handler);
-
-    struct termios tty;
-    struct termios tty_old;
-    memset(&tty, 0, sizeof tty);
-    tty_old = tty;
-
-    cfsetispeed(&tty, (speed_t)B115200);
-    cfsetospeed(&tty, (speed_t)B115200);
-
-    tty.c_cflag     &=  ~PARENB;            // Make 8n1
-    tty.c_cflag     &=  ~CSTOPB;
-    tty.c_cflag     &=  ~CSIZE;
-    tty.c_cflag     |=  CS8;
-
-    tty.c_cc[VMIN]   =  1;                  // read doesn't block
-    tty.c_cc[VTIME]  =  5;                  // 0.5 seconds read timeout
-    tty.c_cflag     |=  CREAD | CLOCAL;     // turn on READ & ignore ctrl lines
-
-    cfmakeraw(&tty);
-    tcflush(fd, TCIFLUSH);
-    tcsetattr(fd, TCSANOW, &tty);
-
 
     Display* display = XOpenDisplay((char *) NULL);
 
@@ -88,8 +104,6 @@ int main(int argc, char** argv) {
         return 1;
     }
     Window rootWindow = XRootWindow(display, XDefaultScreen(display));
-
-    write(fd, "\x04\xff", 2);
 
     unsigned long counter = 0;
     while(counter++) {
@@ -101,12 +115,7 @@ int main(int argc, char** argv) {
         uint32_t* data = (uint32_t*)image->data;
         uint32_t avgColour = average_colour(data, 1920, 1080);
 
-        uint8_t red = avgColour >> 16;
-        uint8_t green = avgColour >> 8;
-        uint8_t blue = avgColour;
-
-        uint8_t payload[] = {0x03, red, green, blue};
-        write(fd, payload, 4);
+        send_colour_data(fd, avgColour);
 
         XDestroyImage(image);
 
