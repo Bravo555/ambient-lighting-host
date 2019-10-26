@@ -14,9 +14,6 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-
 #include <chrono>
 #include <thread>
 
@@ -100,28 +97,6 @@ int main(int argc, char** argv) {
     // enable_capture_mode(fd);
     // signal(SIGINT, int_handler);
 
-    if(!glfwInit()) {
-        fprintf(stderr, "error init glfw");
-        return 3;
-    }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-    GLFWwindow *window = glfwCreateWindow(800, 600, "LearnOpenGL", NULL, NULL);
-    if (window == NULL) {
-        fprintf(stderr, "Failed to create GLFW window\n");
-        glfwTerminate();
-        return -1;
-    }
-    glfwMakeContextCurrent(window);
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        fprintf(stderr, "Failed to initialize GLAD\n");
-        return -1;
-    }
-
-    glViewport(0, 0, 800, 600);
-
     Display* display = XOpenDisplay((char *) NULL);
     if(display == NULL) {
         fprintf(stderr, "an error occured");
@@ -134,14 +109,8 @@ int main(int argc, char** argv) {
     Window rootWindow = XRootWindow(display, XDefaultScreen(display));
     XImage* image = XGetImage(display, rootWindow, 0, 0, width, height, AllPlanes, ZPixmap);
 
-    GLuint vbo = 0;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, width * height * 4, image->data, GL_STATIC_DRAW);
-
-
     unsigned long counter = 0;
-    while(!glfwWindowShouldClose(window)) {
+    while(++counter) {
         auto start = std::chrono::system_clock::now();
 
         XImage* image = XGetImage(display, rootWindow, 0, 0, width, height, AllPlanes, ZPixmap);
@@ -154,12 +123,6 @@ int main(int argc, char** argv) {
 
         XDestroyImage(image);
 
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        glfwSwapBuffers(window);
-        glfwPollEvents();
-
         auto end = std::chrono::system_clock::now();
         auto duration = end - start;
         printf("took %ld ms\n", std::chrono::duration_cast<std::chrono::milliseconds>(duration).count());
@@ -167,7 +130,5 @@ int main(int argc, char** argv) {
     }
 
     close(fd);
-    glfwTerminate();
-
     printf("shit worked\n");
 }

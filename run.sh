@@ -1,3 +1,3 @@
 #!/bin/sh
 
-g++ main.cpp glad.c -Wall -lX11 -lglfw -ldl -ggdb3 && ./a.out
+g++ main.cpp -Wall `pkg-config --cflags --libs MagickWand x11` -ggdb3 && ./a.out
