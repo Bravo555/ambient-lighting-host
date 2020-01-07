@@ -52,8 +52,8 @@ void init_serial(int fd) {
 uint32_t average_colour(uint32_t* data, uint width, uint height) {
     unsigned long redSum = 0, greenSum = 0, blueSum = 0;
     for(uint y = 0; y < height; y++) {
-        for(uint x = 0; x < width; x++) {
-            uint32_t pixel = data[1920 * y + x];
+        for(uint x = y % 2; x < width; x += 2) {
+            uint32_t pixel = data[x * y * width];
 
             uint red = (pixel >> 16) & 0xff;
             uint green = (pixel >> 8) & 0xff;
